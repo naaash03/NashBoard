@@ -1,0 +1,38 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ViewMode {
+  BEGINNER
+  ADVANCED
+}
+
+model User {
+  id             String           @id @default(cuid())
+  email          String           @unique
+  displayName    String
+  modePreference ViewMode         @default(BEGINNER)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  watchlistItems WatchlistItem[]
+}
+
+model WatchlistItem {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+
+  name      String
+  team      String
+  position  String
+  note      String
+
+  createdAt DateTime @default(now())
+}
