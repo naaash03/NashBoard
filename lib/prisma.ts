@@ -1,22 +1,27 @@
-// lib/prisma.ts
+import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 
-const prismaClientSingleton = () => {
-  return new PrismaClient({
-    log: ["error", "warn"],
-  });
-};
+const connectionString = process.env.DATABASE_URL;
 
-declare global {
-  // allow global `var` declarations
-  // eslint-disable-next-line no-var
-  var prisma: PrismaClient | undefined;
+if (!connectionString) {
+  throw new Error("DATABASE_URL is not set in the environment");
 }
 
-const prisma = globalThis.prisma ?? prismaClientSingleton();
+const adapter = new PrismaPg({ connectionString });
+
+const globalForPrisma = globalThis as unknown as {
+  prisma?: PrismaClient;
+};
+
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    adapter,
+  });
 
 if (process.env.NODE_ENV !== "production") {
-  globalThis.prisma = prisma;
+  globalForPrisma.prisma = prisma;
 }
 
 export default prisma;

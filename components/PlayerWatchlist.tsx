@@ -1,6 +1,7 @@
 // components/PlayerWatchlist.tsx
 "use client";
 
+import type React from "react";
 import { useEffect, useState } from "react";
 import type { ViewMode } from "./Sidebar";
 
@@ -19,41 +20,60 @@ interface PlayerWatchlistProps {
 export function PlayerWatchlist({ mode }: PlayerWatchlistProps) {
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // simple form state
   const [name, setName] = useState("");
   const [team, setTeam] = useState("");
   const [position, setPosition] = useState("");
   const [note, setNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const isBeginner = mode === "beginner";
 
-  // Load watchlist from API on mount
+  // Load existing watchlist items
   useEffect(() => {
-    async function fetchWatchlist() {
+    let cancelled = false;
+
+    async function load() {
       try {
         setLoading(true);
+        setError(null);
+
         const res = await fetch("/api/watchlist");
-        if (!res.ok) throw new Error("Failed to load watchlist");
+        if (!res.ok) {
+          throw new Error("Failed to load watchlist");
+        }
+
         const data: WatchlistItem[] = await res.json();
-        setItems(data);
+        if (!cancelled) {
+          setItems(data);
+        }
       } catch (err) {
-        console.error(err);
+        console.error("Error loading watchlist:", err);
+        if (!cancelled) {
+          setError("Could not load watchlist right now. Try again in a moment.");
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
 
-    fetchWatchlist();
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     if (!name || !team || !position) return;
 
+    setSubmitting(true);
+    setError(null);
+
     try {
-      setSaving(true);
       const res = await fetch("/api/watchlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -61,8 +81,7 @@ export function PlayerWatchlist({ mode }: PlayerWatchlistProps) {
       });
 
       if (!res.ok) {
-        console.error("Failed to save watchlist item");
-        return;
+        throw new Error("Failed to add player");
       }
 
       const created: WatchlistItem = await res.json();
@@ -73,84 +92,127 @@ export function PlayerWatchlist({ mode }: PlayerWatchlistProps) {
       setTeam("");
       setPosition("");
       setNote("");
+    } catch (err) {
+      console.error("Error adding player:", err);
+      setError("Could not add player to watchlist. Please try again.");
     } finally {
-      setSaving(false);
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    // Optimistic UI: remove immediately
+    setItems((prev) => prev.filter((p) => p.id !== id));
+
+    try {
+      const res = await fetch(`/api/watchlist?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        throw new Error("Failed to delete");
+      }
+    } catch (err) {
+      console.error("Error deleting player:", err);
+      // If delete fails, we could refetch but here we just show an error
+      setError("Could not remove player. Refresh the page to sync.");
     }
   }
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
-      <h2 className="mb-2 text-sm font-semibold tracking-tight text-slate-100 md:text-base">
-        Player watchlist
-      </h2>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold tracking-tight text-slate-100 md:text-base">
+            Player watchlist
+          </h2>
+          <p className="text-[11px] text-slate-400">
+            {isBeginner
+              ? "Track a few players you care about most. Use this to sanity-check your model against what you see on TV."
+              : "Pin key edges by player so you can compare your projections vs market lines quickly."}
+          </p>
+        </div>
+      </div>
 
-      <p className="mb-3 text-[11px] text-slate-400">
-        {isBeginner
-          ? "Add players you care about and jot down why they matter for tonight’s games."
-          : "Use this list to track players your models care about—later this will show split stats and matchup flags."}
-      </p>
-
-      {/* Add form */}
-      <form
-        onSubmit={handleAdd}
-        className="mb-3 grid grid-cols-2 gap-2 text-[11px] md:grid-cols-4"
-      >
+      <form onSubmit={handleAdd} className="mb-3 grid gap-2 text-[11px] md:grid-cols-4">
         <input
-          className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1"
+          className="rounded-md border border-slate-800 bg-slate-950 px-2 py-1 outline-none placeholder:text-slate-500"
           placeholder="Player name"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
         <input
-          className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1"
+          className="rounded-md border border-slate-800 bg-slate-950 px-2 py-1 outline-none placeholder:text-slate-500"
           placeholder="Team"
           value={team}
           onChange={(e) => setTeam(e.target.value)}
         />
         <input
-          className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1"
-          placeholder="Pos (QB, RB, SF...)"
+          className="rounded-md border border-slate-800 bg-slate-950 px-2 py-1 outline-none placeholder:text-slate-500"
+          placeholder="Position (QB, RB, WR...)"
           value={position}
           onChange={(e) => setPosition(e.target.value)}
         />
-        <input
-          className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 md:col-span-2"
-          placeholder="Note (optional)"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-        />
-        <button
-          type="submit"
-          disabled={saving}
-          className="col-span-2 rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-60 md:col-span-1"
-        >
-          {saving ? "Saving..." : "Add to watchlist"}
-        </button>
+        <div className="flex gap-2">
+          <input
+            className="flex-1 rounded-md border border-slate-800 bg-slate-950 px-2 py-1 outline-none placeholder:text-slate-500"
+            placeholder={isBeginner ? "Why are you watching this player?" : "Note (matchup, prop line, etc.)"}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+          <button
+            type="submit"
+            disabled={submitting || !name || !team || !position}
+            className="whitespace-nowrap rounded-md border border-emerald-500/60 bg-emerald-600/80 px-3 py-1 text-xs font-medium text-slate-950 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
+          >
+            {submitting ? "Adding..." : "Add"}
+          </button>
+        </div>
       </form>
 
-      {/* Items */}
+      {error && (
+        <p className="mb-2 text-[11px] text-rose-400">
+          {error}
+        </p>
+      )}
+
       {loading ? (
-        <p className="text-[11px] text-slate-400">Loading watchlist…</p>
+        <p className="text-[11px] text-slate-400">Loading your watchlist...</p>
       ) : items.length === 0 ? (
         <p className="text-[11px] text-slate-400">
-          No players yet. Add a few to get started.
+          No players yet. Start by adding one or two you care about tonight.
         </p>
       ) : (
         <ul className="space-y-2 text-xs">
           {items.map((p) => (
             <li
               key={p.id}
-              className="rounded-lg border border-slate-800/80 bg-slate-950/60 px-3 py-2"
+              className="flex items-start justify-between gap-2 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2"
             >
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-slate-50">{p.name}</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-slate-100">
+                    {p.name}
+                  </span>
+                  <span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-[1px] text-[10px] uppercase tracking-wide text-slate-300">
+                    {p.position}
+                  </span>
+                </div>
                 <span className="text-[11px] text-slate-400">
-                  {p.team} · {p.position}
+                  {p.team}
                 </span>
+                {p.note && (
+                  <p className="mt-1 text-[11px] text-slate-300">
+                    {p.note}
+                  </p>
+                )}
               </div>
-              {p.note && (
-                <p className="mt-1 text-[11px] text-slate-400">{p.note}</p>
-              )}
+              <button
+                type="button"
+                onClick={() => handleDelete(p.id)}
+                className="text-[11px] text-slate-400 hover:text-rose-400"
+              >
+                Remove
+              </button>
             </li>
           ))}
         </ul>

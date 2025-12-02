@@ -1,10 +1,9 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
+  // With Prisma 7, the URL is configured in prisma.config.ts, not in this schema.
   provider = "postgresql"
 }
 
@@ -18,14 +17,19 @@ model User {
   email          String           @unique
   displayName    String
   modePreference ViewMode         @default(BEGINNER)
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+
+  favoriteSports String[]         @default([])
+  favoriteTeams  String[]         @default([])
 
   watchlistItems WatchlistItem[]
+
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 }
 
 model WatchlistItem {
   id        String   @id @default(cuid())
+
   user      User     @relation(fields: [userId], references: [id])
   userId    String
 
