@@ -3,7 +3,7 @@
 
 import type React from "react";
 import { useEffect, useState } from "react";
-import type { ViewMode } from "./Sidebar";
+import { useMode } from "@/app/context/ModeContext";
 
 type WatchlistItem = {
   id: string;
@@ -13,11 +13,8 @@ type WatchlistItem = {
   note: string;
 };
 
-interface PlayerWatchlistProps {
-  mode: ViewMode;
-}
-
-export function PlayerWatchlist({ mode }: PlayerWatchlistProps) {
+export function PlayerWatchlist() {
+  const { mode } = useMode();
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -133,7 +130,10 @@ export function PlayerWatchlist({ mode }: PlayerWatchlistProps) {
         </div>
       </div>
 
-      <form onSubmit={handleAdd} className="mb-3 grid gap-2 text-[11px] md:grid-cols-4">
+      <form
+        onSubmit={handleAdd}
+        className="mb-3 grid gap-2 text-[11px] md:grid-cols-2 xl:grid-cols-4"
+      >
         <input
           className="rounded-md border border-slate-800 bg-slate-950 px-2 py-1 outline-none placeholder:text-slate-500"
           placeholder="Player name"
@@ -152,7 +152,7 @@ export function PlayerWatchlist({ mode }: PlayerWatchlistProps) {
           value={position}
           onChange={(e) => setPosition(e.target.value)}
         />
-        <div className="flex gap-2">
+        <div className="flex gap-2 md:col-span-2 xl:col-span-1">
           <input
             className="flex-1 rounded-md border border-slate-800 bg-slate-950 px-2 py-1 outline-none placeholder:text-slate-500"
             placeholder={isBeginner ? "Why are you watching this player?" : "Note (matchup, prop line, etc.)"}
@@ -176,7 +176,7 @@ export function PlayerWatchlist({ mode }: PlayerWatchlistProps) {
       )}
 
       {loading ? (
-        <p className="text-[11px] text-slate-400">Loading your watchlist...</p>
+        <p className="text-[11px] text-slate-400">Loading your watchlist…</p>
       ) : items.length === 0 ? (
         <p className="text-[11px] text-slate-400">
           No players yet. Start by adding one or two you care about tonight.
@@ -193,7 +193,7 @@ export function PlayerWatchlist({ mode }: PlayerWatchlistProps) {
                   <span className="text-sm font-semibold text-slate-100">
                     {p.name}
                   </span>
-                  <span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-[1px] text-[10px] uppercase tracking-wide text-slate-300">
+                  <span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-px text-[10px] uppercase tracking-wide text-slate-300">
                     {p.position}
                   </span>
                 </div>

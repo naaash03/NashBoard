@@ -1,14 +1,10 @@
 // components/Sidebar.tsx
 "use client";
 
-export type ViewMode = "beginner" | "advanced";
+import { useMode } from "@/app/context/ModeContext";
 
-interface SidebarProps {
-  mode: ViewMode;
-  onModeChange: (mode: ViewMode) => void;
-}
-
-export function Sidebar({ mode, onModeChange }: SidebarProps) {
+export function Sidebar() {
+  const { mode, setMode } = useMode();
   const isBeginner = mode === "beginner";
 
   return (
@@ -54,7 +50,7 @@ export function Sidebar({ mode, onModeChange }: SidebarProps) {
                 ? "bg-slate-800 text-slate-100"
                 : "bg-slate-900/40 text-slate-400 hover:bg-slate-800/70"
             }`}
-            onClick={() => onModeChange("beginner")}
+            onClick={() => setMode("beginner")}
           >
             Beginner: Guided view
             {isBeginner && (
@@ -70,7 +66,7 @@ export function Sidebar({ mode, onModeChange }: SidebarProps) {
                 ? "bg-slate-800 text-slate-100"
                 : "bg-slate-900/40 text-slate-400 hover:bg-slate-800/70"
             }`}
-            onClick={() => onModeChange("advanced")}
+            onClick={() => setMode("advanced")}
           >
             Advanced: Raw metrics
             {!isBeginner && (

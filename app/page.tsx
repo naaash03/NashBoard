@@ -1,22 +1,35 @@
 // app/page.tsx
-"use client";
 
-import { Sidebar, type ViewMode } from "@/components/Sidebar";
+import { Sidebar } from "@/components/Sidebar";
 import { TopBar } from "@/components/TopBar";
 import { TonightSlate } from "@/components/TonightSlate";
 import { PlayerWatchlist } from "@/components/PlayerWatchlist";
 import { BuildSteps } from "@/components/BuildSteps";
-import { useState } from "react";
+import prisma from "@/lib/prisma";
 
-export default function Home() {
-  const [mode, setMode] = useState<ViewMode>("beginner");
+export default async function Home() {
+  const DEMO_EMAIL = "demo@nashboard.local";
+
+  const demoUser = await prisma.user.upsert({
+    where: { email: DEMO_EMAIL },
+    update: {},
+    create: {
+      email: DEMO_EMAIL,
+      displayName: "Demo User",
+      modePreference: "BEGINNER",
+    },
+  });
+
+  const watchlistCount = await prisma.watchlistItem.count({
+    where: { userId: demoUser.id },
+  });
 
   return (
     <div className="flex min-h-screen bg-slate-950 text-slate-50">
-      <Sidebar mode={mode} onModeChange={setMode} />
+      <Sidebar />
 
       <main className="flex flex-1 flex-col">
-        <TopBar mode={mode} />
+        <TopBar watchlistCount={watchlistCount} />
 
         {/* Filters + summary cards */}
         <section className="border-b border-slate-800 bg-slate-950/80 px-4 py-3 md:px-6 md:py-4">
@@ -43,12 +56,14 @@ export default function Home() {
               </div>
               <div className="rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2">
                 <p className="text-slate-400">Watchlist players</p>
-                <p className="text-sm font-semibold text-slate-50">3</p>
+                <p className="text-sm font-semibold text-slate-50">
+                  {watchlistCount}
+                </p>
               </div>
               <div className="rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2">
                 <p className="text-slate-400">Model status</p>
                 <p className="text-sm font-semibold text-emerald-400">
-                  v0.1 · {mode === "beginner" ? "guided" : "manual advanced"}
+                  v0.1
                 </p>
               </div>
             </div>
@@ -58,11 +73,11 @@ export default function Home() {
         {/* Main grid */}
         <section className="flex-1 px-4 py-4 md:px-6 md:py-6">
           <div className="grid gap-4 lg:grid-cols-3">
-            <TonightSlate mode={mode} />
+            <TonightSlate />
 
             <div className="space-y-4">
-              <PlayerWatchlist mode={mode} />
-              <BuildSteps mode={mode} />
+              <PlayerWatchlist />
+              <BuildSteps />
             </div>
           </div>
         </section>

@@ -1,13 +1,11 @@
 // components/BuildSteps.tsx
 "use client";
 
-import type { ViewMode } from "./Sidebar";
+import { useMode } from "@/app/context/ModeContext";
 
-interface BuildStepsProps {
-  mode: ViewMode;
-}
-
-export function BuildSteps({ mode }: BuildStepsProps) {
+export function BuildSteps() {
+  const { mode } = useMode();
+  const isBeginner = mode === "beginner";
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 text-xs">
       <h2 className="mb-2 text-sm font-semibold tracking-tight text-slate-100 md:text-base">
@@ -24,12 +22,11 @@ export function BuildSteps({ mode }: BuildStepsProps) {
           SFR-14).
         </li>
       </ol>
-      {mode === "beginner" && (
-        <p className="mt-2 text-[11px] text-slate-400">
-          In Beginner Mode, we keep the roadmap focused on the basics: live data, explanations, and
-          a simple watchlist.
-        </p>
-      )}
+      <p className="mt-2 text-[11px] text-slate-400">
+        {isBeginner
+          ? "In Beginner mode, we keep the roadmap focused on live data, plain-language explanations, and a simple watchlist (UFR-03, SFR-21)."
+          : "In Advanced mode, the roadmap emphasizes model wiring, metric configuration, and faster comparison vs market lines (UFR-08, SFR-23)."}
+      </p>
     </div>
   );
 }
