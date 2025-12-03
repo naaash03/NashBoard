@@ -34,8 +34,8 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
   },
   {
     key: "watchlist",
-    name: "Watchlist",
-    description: "Tracks favorite teams and players.",
+    name: "Team Watchlist",
+    description: "Tracks favorite teams and shows whether they play tonight.",
     category: "Favorites",
     supportedSports: ["NFL", "NBA", "MLB"],
     defaultSize: { w: 3, h: 3 },

@@ -4,7 +4,10 @@ import { prisma } from "@/lib/prisma";
 
 const DEMO_EMAIL = "demo@nashboard.local";
 
-export async function GET() {
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const sport = searchParams.get("sport") ?? undefined;
+
   const user = await prisma.user.findUnique({
     where: { email: DEMO_EMAIL },
   });
@@ -12,7 +15,10 @@ export async function GET() {
   if (!user) return NextResponse.json([]);
 
   const items = await prisma.favorite.findMany({
-    where: { userId: user.id },
+    where: {
+      userId: user.id,
+      ...(sport ? { sport } : {}),
+    },
     orderBy: { createdAt: "desc" },
   });
 
@@ -20,7 +26,11 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { label, entityId, entityType } = await req.json();
+  const { label, entityId, entityType, sport } = await req.json();
+
+  if (!sport || !["NFL", "NBA", "MLB"].includes(sport)) {
+    return NextResponse.json({ error: "Invalid sport" }, { status: 400 });
+  }
 
   if (!label || !entityId || !entityType) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
@@ -38,6 +48,7 @@ export async function POST(req: Request) {
       label,
       entityId,
       entityType,
+      sport,
     },
   });
 

@@ -12,19 +12,45 @@ export default function WidgetLibrary({
 }) {
   const [widgets, setWidgets] = useState<WidgetDefinition[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const res = await fetch(`/api/widgets/metadata?sport=${sport}`);
-      const data = await res.json();
-      setWidgets(data.widgets);
-      setLoading(false);
+      setError(null);
+
+      try {
+        const res = await fetch(`/api/widgets/metadata?sport=${sport}`);
+
+        if (!res.ok) {
+          console.error("Failed to load widget metadata", res.status);
+          setError("Failed to load widget library.");
+          setWidgets([]);
+          return;
+        }
+
+        const data = await res.json();
+        setWidgets(data.widgets);
+      } catch (err) {
+        console.error("Error loading widget metadata", err);
+        setError("Failed to load widget library.");
+        setWidgets([]);
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, [sport]);
 
-  if (loading) return <div className="p-4">Loading widgets…</div>;
+  if (loading) return <div className="p-4">Loading widgets...</div>;
+
+  if (error) {
+    return (
+      <div className="p-4 text-xs text-red-300">
+        {error}
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 space-y-4">

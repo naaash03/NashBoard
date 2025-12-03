@@ -2,7 +2,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import type { JSX } from "react";
 import WidgetLibrary from "@/components/widgets/WidgetLibrary";
+import TonightsSlateWidget from "@/components/widgets/TonightsSlateWidget";
+import PlayerCardWidget from "@/components/widgets/PlayerCardWidget";
+import WatchlistWidget from "@/components/widgets/WatchlistWidget";
+import RbVsDlineWidget from "@/components/widgets/RbVsDlineWidget";
 
 type Sport = "NFL" | "NBA" | "MLB";
 
@@ -23,6 +28,23 @@ type DashboardWidget = {
   settings: Record<string, unknown> | null;
 };
 
+type WidgetMode = "BEGINNER" | "ADVANCED";
+
+type WidgetComponentProps = {
+  sport: Sport;
+  mode: WidgetMode;
+};
+
+const WIDGET_COMPONENTS: Record<
+  string,
+  (props: WidgetComponentProps) => JSX.Element | null
+> = {
+  tonights_slate: (props) => <TonightsSlateWidget {...props} />,
+  player_card: (props) => <PlayerCardWidget {...props} />,
+  watchlist: (props) => <WatchlistWidget sport={props.sport} />,
+  rb_vs_dline: (props) => <RbVsDlineWidget {...props} />,
+};
+
 export default function DashboardPage() {
   const [sport, setSport] = useState<Sport>("NFL");
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
@@ -30,38 +52,104 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [loadingAdd, setLoadingAdd] = useState(false);
   const [savingMode, setSavingMode] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const loadDashboard = useCallback(async (selectedSport: Sport) => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/dashboard?sport=${selectedSport}`, {
-        cache: "no-store",
-      });
-      const data = await res.json();
-      setDashboard(data.dashboard);
-      setWidgets(data.widgets);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const loadDashboard = useCallback(
+    async (nextSport: Sport) => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const [dashboardRes, widgetsRes] = await Promise.all([
+          fetch(`/api/dashboard?sport=${nextSport}`),
+          fetch(`/api/dashboard/widgets?sport=${nextSport}`),
+        ]);
+
+        if (!dashboardRes.ok || !widgetsRes.ok) {
+          const dashText = !dashboardRes.ok ? await dashboardRes.text() : "";
+          const widgetsText = !widgetsRes.ok ? await widgetsRes.text() : "";
+          console.error("Failed to load dashboard/widgets", {
+            dashboardStatus: dashboardRes.status,
+            widgetsStatus: widgetsRes.status,
+            dashText,
+            widgetsText,
+          });
+          throw new Error("Failed to load dashboard data");
+        }
+
+        const [dashboardData, widgetsData] = await Promise.all([
+          dashboardRes.json(),
+          widgetsRes.json(),
+        ]);
+
+        setDashboard(dashboardData.dashboard);
+        setWidgets(widgetsData.widgets);
+      } catch (err) {
+        console.error("Error in loadDashboard", err);
+        setError("Failed to load dashboard. Please try again.");
+        setDashboard(null);
+        setWidgets([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     loadDashboard(sport);
   }, [sport, loadDashboard]);
 
   async function handleAddWidget(widgetKey: string) {
-    if (!dashboard) return;
+    if (!sport) return;
+
+    setError(null);
     setLoadingAdd(true);
+
     try {
-      await fetch("/api/dashboard/widgets", {
+      const res = await fetch("/api/dashboard/widgets", {
         method: "POST",
+        body: JSON.stringify({ sport, widgetKey }),
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ widgetKey, sport }),
       });
-      // Reload dashboard to get new widgets
+
+      if (!res.ok) {
+        console.error("Failed to add widget", await res.text());
+        setError("Could not add widget. Please try again.");
+        return;
+      }
+
       await loadDashboard(sport);
+    } catch (err) {
+      console.error("Error adding widget", err);
+      setError("Could not add widget. Please try again.");
     } finally {
       setLoadingAdd(false);
+    }
+  }
+
+  async function handleRemoveWidget(widgetId: string) {
+    if (!widgetId) {
+      console.error("No widget id provided for delete");
+      return;
+    }
+    // Optimistically remove from UI
+    setWidgets((prev) => prev.filter((w) => w.id !== widgetId));
+
+    try {
+      const res = await fetch(`/api/dashboard/widgets/${widgetId}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        console.error("Failed to delete widget", await res.text());
+        // Reload to reconcile if something went wrong
+        await loadDashboard(sport);
+      }
+    } catch (err) {
+      console.error("Failed to delete widget", err);
+      // Reload to keep client/server state in sync
+      await loadDashboard(sport);
     }
   }
 
@@ -98,6 +186,8 @@ export default function DashboardPage() {
   const modeLabel =
     dashboard?.mode === "ADVANCED" ? "Advanced Mode" : "Beginner Mode";
 
+  const currentMode: WidgetMode = dashboard?.mode ?? "BEGINNER";
+
   return (
     <div className="min-h-screen bg-black text-white flex flex-col">
       {/* Top bar */}
@@ -105,7 +195,7 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-xl font-semibold">NashBoard</h1>
           <p className="text-xs text-neutral-400">
-            {dashboard?.title ?? "Loading dashboard…"} · {modeLabel}
+            {dashboard?.title ?? "Loading dashboard..."} - {modeLabel}
           </p>
         </div>
 
@@ -160,9 +250,14 @@ export default function DashboardPage() {
         {/* Dashboard area */}
         <section className="flex-1 p-6 overflow-y-auto">
           {loading ? (
-            <div>Loading dashboard…</div>
+            <div>Loading dashboard...</div>
           ) : (
             <>
+              {error && (
+                <div className="mb-3 rounded-md border border-red-500 bg-red-950 px-3 py-2 text-xs text-red-200">
+                  {error}
+                </div>
+              )}
               {widgets.length === 0 ? (
                 <div className="text-sm text-neutral-400 border border-dashed border-neutral-700 rounded-xl p-6">
                   Your {sport} dashboard is currently empty.
@@ -171,20 +266,41 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {widgets.map((w) => (
-                    <div
-                      key={w.id}
-                      className="border border-neutral-800 bg-neutral-900 rounded-xl p-3 text-sm"
-                    >
-                      <p className="font-semibold mb-1">
-                        Widget: <span className="font-mono">{w.widgetKey}</span>
-                      </p>
-                      <p className="text-xs text-neutral-400">
-                        (Placeholder content – real widget rendering will be
-                        wired in the next section.)
-                      </p>
-                    </div>
-                  ))}
+                  {widgets.map((w) => {
+                    const WidgetComponent = WIDGET_COMPONENTS[w.widgetKey];
+
+                    // Simple human-readable label from the key
+                    const label = w.widgetKey.replace(/_/g, " ");
+
+                    return (
+                      <div
+                        key={w.id}
+                        className="border border-neutral-800 bg-neutral-900 rounded-xl p-3 text-sm"
+                      >
+                        <div className="mb-2 flex items-center justify-between">
+                          <p className="font-semibold text-xs capitalize">{label}</p>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveWidget(w.id)}
+                            className="rounded-full px-2 text-xs text-neutral-400 hover:text-red-400 hover:bg-neutral-800"
+                            aria-label="Remove widget"
+                          >
+                            ×
+                          </button>
+                        </div>
+
+                        {WidgetComponent ? (
+                          <WidgetComponent sport={sport} mode={currentMode} />
+                        ) : (
+                          <>
+                            <p className="text-xs text-neutral-400">
+                              This widget type has not been wired up yet.
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </>
@@ -196,7 +312,7 @@ export default function DashboardPage() {
           <WidgetLibrary sport={sport} onAddWidget={handleAddWidget} />
           {loadingAdd && (
             <p className="px-4 pb-4 text-xs text-neutral-400">
-              Adding widget…
+              Adding widget...
             </p>
           )}
         </aside>

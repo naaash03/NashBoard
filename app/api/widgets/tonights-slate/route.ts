@@ -1,89 +1,55 @@
-// app/api/widgets/tonights-slate/route.ts
 import { NextResponse } from "next/server";
-
-type Sport = "NFL" | "NBA" | "MLB";
-
-type SlateGame = {
-  id: string;
-  league: Sport;
-  home: string;
-  away: string;
-  startTime: string;
-  spread?: string;
-  total?: number;
-  status: "SCHEDULED" | "LIVE" | "FINAL";
-};
-
-function getMockSlate(sport: Sport): SlateGame[] {
-  const now = new Date();
-  if (sport === "NFL") {
-    return [
-      {
-        id: "nfl1",
-        league: "NFL",
-        home: "Eagles",
-        away: "Cowboys",
-        startTime: now.toISOString(),
-        spread: "-2.5 PHI",
-        total: 48.5,
-        status: "SCHEDULED",
-      },
-      {
-        id: "nfl2",
-        league: "NFL",
-        home: "Chiefs",
-        away: "Bills",
-        startTime: now.toISOString(),
-        spread: "-3.0 KC",
-        total: 52.5,
-        status: "SCHEDULED",
-      },
-    ];
-  }
-  if (sport === "NBA") {
-    return [
-      {
-        id: "nba1",
-        league: "NBA",
-        home: "Lakers",
-        away: "Warriors",
-        startTime: now.toISOString(),
-        total: 232.5,
-        status: "SCHEDULED",
-      },
-      {
-        id: "nba2",
-        league: "NBA",
-        home: "Celtics",
-        away: "Bucks",
-        startTime: now.toISOString(),
-        total: 226.5,
-        status: "SCHEDULED",
-      },
-    ];
-  }
-  // MLB
-  return [
-    {
-      id: "mlb1",
-      league: "MLB",
-      home: "Yankees",
-      away: "Red Sox",
-      startTime: now.toISOString(),
-      total: 8.5,
-      status: "SCHEDULED",
-    },
-  ];
-}
+import type { Sport, SlateGame } from "@/lib/sports/shared";
+import { fetchTonightNbaSlate } from "@/lib/sports/nba";
+import { fetchTonightNflSlate } from "@/lib/sports/nfl";
+import { fetchTonightMlbSlate } from "@/lib/sports/mlb";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const sportParam = (searchParams.get("sport") as Sport | null) ?? "NFL";
-  const mode = (searchParams.get("mode") as "BEGINNER" | "ADVANCED" | null) ?? "BEGINNER";
+  const sportParam = (searchParams.get("sport") ?? "NFL") as Sport;
+  const mode = searchParams.get("mode") ?? "BEGINNER";
 
-  const games = getMockSlate(sportParam);
+  try {
+    let games: SlateGame[] = [];
+    let source: "api-sports" | "mock" = "api-sports";
 
-  // You *could* trim data here for BEGINNER vs ADVANCED,
-  // but for now we'll just send everything and let the widget decide.
-  return NextResponse.json({ games, mode, sport: sportParam });
+    if (sportParam === "NBA") {
+      games = await fetchTonightNbaSlate();
+    } else if (sportParam === "NFL") {
+      games = await fetchTonightNflSlate();
+    } else {
+      games = await fetchTonightMlbSlate();
+    }
+
+    // Our fetch functions already fall back to mock data if the API fails.
+    // Detect that based on ids beginning with "mock-" as a simple heuristic.
+    if (Array.isArray(games) && games.some((g) => g.id.startsWith("mock-"))) {
+      source = "mock";
+    }
+
+    // Normalize to widget-friendly shape
+    const normalized = games.map((g) => ({
+      id: g.id,
+      league: g.league,
+      home: (g as SlateGame & { home?: string }).home ?? g.homeTeam ?? "Home",
+      away: (g as SlateGame & { away?: string }).away ?? g.awayTeam ?? "Away",
+      startTime: g.startTime,
+      spread: (g as { spread?: string | number }).spread,
+      total: (g as { total?: number }).total,
+      status: (g as { status?: string }).status ?? "SCHEDULED",
+    }));
+
+    return NextResponse.json({
+      sport: sportParam,
+      mode,
+      games: normalized,
+      source,
+    });
+  } catch (err) {
+    console.error("Error in tonights-slate route:", err);
+    return NextResponse.json(
+      { error: "Failed to load tonight's slate" },
+      { status: 500 }
+    );
+  }
 }

@@ -176,7 +176,7 @@ export function PlayerWatchlist() {
       )}
 
       {loading ? (
-        <p className="text-[11px] text-slate-400">Loading your watchlist…</p>
+        <p className="text-[11px] text-slate-400">Loading your watchlist...</p>
       ) : items.length === 0 ? (
         <p className="text-[11px] text-slate-400">
           No players yet. Start by adding one or two you care about tonight.

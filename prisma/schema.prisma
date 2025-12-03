@@ -84,6 +84,7 @@ model Favorite {
   id         String   @id @default(cuid())
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId     String
+  sport      Sport    @default(NFL)
 
   // "PLAYER" | "TEAM" | "GAME"
   entityType String
