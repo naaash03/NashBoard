@@ -1,42 +1,136 @@
+// prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  // With Prisma 7, the URL is configured in prisma.config.ts, not in this schema.
   provider = "postgresql"
 }
 
-enum ViewMode {
+// --- Enums ---
+
+enum Sport {
+  NFL
+  NBA
+  MLB
+}
+
+enum DashboardMode {
   BEGINNER
   ADVANCED
 }
 
+// --- Core Models ---
+
 model User {
-  id             String           @id @default(cuid())
-  email          String           @unique
-  displayName    String
-  modePreference ViewMode         @default(BEGINNER)
+  id        String     @id @default(cuid())
+  email     String     @unique
+  name      String?
 
-  favoriteSports String[]         @default([])
-  favoriteTeams  String[]         @default([])
+  // Relationships
+  dashboards Dashboard[]
+  favorites  Favorite[]
 
-  watchlistItems WatchlistItem[]
-
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 }
 
-model WatchlistItem {
-  id        String   @id @default(cuid())
-
-  user      User     @relation(fields: [userId], references: [id])
+model Dashboard {
+  id        String         @id @default(cuid())
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
 
-  name      String
-  team      String
-  position  String
-  note      String
+  // Which sport this dashboard is for (NFL / NBA / MLB)
+  sport     Sport
 
-  createdAt DateTime @default(now())
+  // Beginner vs Advanced mode for this dashboard
+  mode      DashboardMode  @default(BEGINNER)
+
+  title     String         @default("My NashBoard")
+
+  // Widgets placed on this dashboard
+  widgets   DashboardWidget[]
+
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+// An instance of a widget on a specific dashboard
+model DashboardWidget {
+  id          String    @id @default(cuid())
+  dashboard   Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+  dashboardId String
+
+  // Key that identifies the widget type in the registry
+  // e.g. "tonights_slate", "player_card", "watchlist", "rb_vs_dline"
+  widgetKey   String
+
+  // Grid position and size (for drag-and-drop layout)
+  x           Int        @default(0)
+  y           Int        @default(0)
+  w           Int        @default(4)
+  h           Int        @default(3)
+
+  // Arbitrary settings JSON (selected player, team, filters, etc.)
+  settings    Json?
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+// Favorites / watchlist items (teams, players, etc.)
+model Favorite {
+  id         String   @id @default(cuid())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+
+  // "PLAYER" | "TEAM" | "GAME"
+  entityType String
+  // ID from Player / Team / Game or external API ID
+  entityId   String
+
+  label      String
+
+  createdAt  DateTime @default(now())
+}
+
+// --- Sports Entities ---
+
+model Team {
+  id        String  @id @default(cuid())
+  sport     Sport
+  name      String
+  shortCode String  // e.g. "PHI", "LAL"
+  apiId     String? @unique
+
+  playersHome Player[] @relation("TeamPlayers")
+  homeGames   Game[]   @relation("HomeTeam")
+  awayGames   Game[]   @relation("AwayTeam")
+}
+
+model Player {
+  id       String  @id @default(cuid())
+  sport    Sport
+  team     Team?   @relation("TeamPlayers", fields: [teamId], references: [id])
+  teamId   String?
+
+  name     String
+  position String?
+  apiId    String? @unique
+}
+
+model Game {
+  id          String  @id @default(cuid())
+  sport       Sport
+
+  homeTeam    Team    @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  homeTeamId  String
+
+  awayTeam    Team    @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  awayTeamId  String
+
+  startTime   DateTime
+  status      String   @default("SCHEDULED") // SCHEDULED, LIVE, FINAL, etc.
+  apiId       String?  @unique
 }
