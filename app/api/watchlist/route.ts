@@ -8,18 +8,19 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const sport = searchParams.get("sport") ?? undefined;
 
-  const user = await prisma.user.findUnique({
+  const user = await prisma.user.upsert({
     where: { email: DEMO_EMAIL },
+    update: {},
+    create: { email: DEMO_EMAIL, name: "Demo User" },
   });
-
-  if (!user) return NextResponse.json([]);
+  const userId = user.id;
 
   const items = await prisma.favorite.findMany({
     where: {
-      userId: user.id,
+      userId,
       ...(sport ? { sport } : {}),
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: { createdAt: "asc" },
   });
 
   return NextResponse.json(items);
@@ -41,10 +42,11 @@ export async function POST(req: Request) {
     update: {},
     create: { email: DEMO_EMAIL, name: "Demo User" },
   });
+  const userId = user.id;
 
   const item = await prisma.favorite.create({
     data: {
-      userId: user.id,
+      userId,
       label,
       entityId,
       entityType,

@@ -37,23 +37,16 @@ model User {
 }
 
 model Dashboard {
-  id        String         @id @default(cuid())
-  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
-
-  // Which sport this dashboard is for (NFL / NBA / MLB)
-  sport     Sport
-
-  // Beginner vs Advanced mode for this dashboard
-  mode      DashboardMode  @default(BEGINNER)
-
-  title     String         @default("My NashBoard")
-
-  // Widgets placed on this dashboard
-  widgets   DashboardWidget[]
-
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  id          String            @id @default(cuid())
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sport       Sport
+  title       String            @default("My NashBoard")
+  description String?
+  mode        DashboardMode     @default(BEGINNER)
+  widgets     DashboardWidget[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 }
 
 // An instance of a widget on a specific dashboard
@@ -82,17 +75,12 @@ model DashboardWidget {
 // Favorites / watchlist items (teams, players, etc.)
 model Favorite {
   id         String   @id @default(cuid())
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   sport      Sport    @default(NFL)
-
-  // "PLAYER" | "TEAM" | "GAME"
-  entityType String
-  // ID from Player / Team / Game or external API ID
-  entityId   String
-
   label      String
-
+  entityType String
+  entityId   String
   createdAt  DateTime @default(now())
 }
 

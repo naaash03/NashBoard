@@ -30,6 +30,21 @@ type PlayerEntry = {
   name: string;
 };
 
+type RawPlayer = PlayerCardData & {
+  stats?: Record<string, unknown>;
+  ppg?: unknown;
+  apg?: unknown;
+  rpg?: unknown;
+  points?: unknown;
+  assists?: unknown;
+  rebounds?: unknown;
+  headlineValue?: unknown;
+};
+
+type PlayerCardApiResponse =
+  | (RawPlayer & { player?: RawPlayer; source?: PlayerCardData["source"] })
+  | { player?: RawPlayer; source?: PlayerCardData["source"] };
+
 type Props = {
   sport: Sport;
   mode: Mode;
@@ -47,9 +62,9 @@ function formatNextGame(time?: string) {
 }
 
 function formatSource(source?: string) {
-  if (source === "api-sports") return "Live • API-SPORTS";
-  if (source === "mock") return "Cached • Demo data";
-  return "Source • Unknown";
+  if (source === "api-sports") return "Live - API-SPORTS";
+  if (source === "mock") return "Cached - Demo data";
+  return "Source - Unknown";
 }
 
 export default function PlayerCardWidget({ sport, mode }: Props) {
@@ -57,10 +72,12 @@ export default function PlayerCardWidget({ sport, mode }: Props) {
   const [players, setPlayers] = useState<PlayerEntry[]>([]);
   const [cards, setCards] = useState<Record<string, PlayerCardData | null>>({});
   const [loadingMap, setLoadingMap] = useState<Record<string, boolean>>({});
+  const [errors, setErrors] = useState<Record<string, string | null>>({});
 
   const fetchPlayerCard = useCallback(
     async (entry: PlayerEntry) => {
       setLoadingMap((prev) => ({ ...prev, [entry.id]: true }));
+      setErrors((prev) => ({ ...prev, [entry.id]: null }));
 
       try {
         const res = await fetch(
@@ -72,43 +89,20 @@ export default function PlayerCardWidget({ sport, mode }: Props) {
 
         if (!res.ok) {
           console.error("Failed to load player card", res.status);
-          setCards((prev) => ({
+          setCards((prev) => ({ ...prev, [entry.id]: null }));
+          setErrors((prev) => ({
             ...prev,
-            [entry.id]: {
-              name: entry.name,
-              team: undefined,
-              position: undefined,
-              nextOpponent: undefined,
-              nextGameTime: undefined,
-              stats: {},
-              league: sport,
-              source: "unknown",
-            },
+            [entry.id]: "Failed to load player card.",
           }));
           return;
         }
 
-        const raw = (await res.json()) as any;
-        const player = raw.player ?? raw;
-
-        const inputNameNormalized = entry.name.trim().toLowerCase();
-        const returnedNameNormalized = (player.name ?? "").trim().toLowerCase();
-        const nameMatches =
-          inputNameNormalized.length > 0 &&
-          returnedNameNormalized.length > 0 &&
-          (returnedNameNormalized === inputNameNormalized ||
-            returnedNameNormalized.includes(inputNameNormalized) ||
-            inputNameNormalized.includes(returnedNameNormalized));
-
-        const inputParts = inputNameNormalized.split(/\s+/).filter(Boolean);
-        const returnedParts = returnedNameNormalized.split(/\s+/).filter(Boolean);
-        const looseMatch =
-          !nameMatches &&
-          inputParts.length >= 2 &&
-          returnedParts.length >= 2 &&
-          inputParts[0] === returnedParts[0] &&
-          inputParts[inputParts.length - 1]?.[0] ===
-            returnedParts[returnedParts.length - 1]?.[0];
+        const raw = (await res.json()) as PlayerCardApiResponse;
+        const playerFromResponse =
+          raw && typeof raw === "object" && "player" in raw
+            ? raw.player
+            : undefined;
+        const player = (playerFromResponse ?? raw ?? {}) as RawPlayer;
 
         const toNum = (val: unknown) => {
           const n = Number(val);
@@ -144,46 +138,46 @@ export default function PlayerCardWidget({ sport, mode }: Props) {
             stats.assistsPerGame =
               stats.assistsPerGame ?? Math.round(base * 0.3 * 10) / 10;
             stats.reboundsPerGame =
-            stats.reboundsPerGame ?? Math.round(base * 0.35 * 10) / 10;
+              stats.reboundsPerGame ?? Math.round(base * 0.35 * 10) / 10;
           }
         }
 
         const cardData = {
-          name: player.name || entry.name,
+          name: player.name ?? "",
           team: player.team,
           position: player.position,
           nextOpponent: player.nextOpponent,
           nextGameTime: player.nextGameTime,
           stats,
           league: (player.league as Sport) ?? (player.sport as Sport) ?? sport,
-          source: (player.source as any) ?? (raw.source as any) ?? "mock",
+          source:
+            (typeof raw === "object" && raw && "source" in raw
+              ? raw.source
+              : undefined) ??
+            player.source ??
+            "mock",
         };
+
+        if (!cardData.name) {
+          setCards((prev) => ({ ...prev, [entry.id]: null }));
+          setErrors((prev) => ({
+            ...prev,
+            [entry.id]: "No player data returned from API.",
+          }));
+          return;
+        }
 
         setCards((prev) => ({
           ...prev,
-          [entry.id]: nameMatches || looseMatch
-            ? {
-                ...cardData,
-              }
-            : {
-                ...cardData,
-                name: entry.name,
-                team: cardData.team,
-                position: cardData.position,
-                league: sport,
-                source: cardData.source ?? "unknown",
-              },
+          [entry.id]: cardData,
         }));
+        setErrors((prev) => ({ ...prev, [entry.id]: null }));
       } catch (err) {
         console.error("Error loading player card", err);
-        setCards((prev) => ({
+        setCards((prev) => ({ ...prev, [entry.id]: null }));
+        setErrors((prev) => ({
           ...prev,
-          [entry.id]: {
-            name: entry.name,
-            stats: {},
-            league: sport,
-            source: "unknown",
-          },
+          [entry.id]: "Failed to load player card.",
         }));
       } finally {
         setLoadingMap((prev) => ({ ...prev, [entry.id]: false }));
@@ -254,6 +248,7 @@ export default function PlayerCardWidget({ sport, mode }: Props) {
       <div className="space-y-2">
         {players.map((entry) => {
           const card = cards[entry.id];
+          const error = errors[entry.id];
           const loading = loadingMap[entry.id];
 
           return (
@@ -264,12 +259,12 @@ export default function PlayerCardWidget({ sport, mode }: Props) {
               <div className="mb-1 flex items-center justify-between">
                 <div>
                   <p className="text-sm font-semibold text-neutral-100">
-                    {card?.name ?? entry.name}
+                    {card?.name ?? "No player data"}
                   </p>
                   <p className="text-[11px] text-neutral-400">
                     {card?.team
-                      ? `${card.team} • ${card.position ?? ""}`
-                      : "Team / position: N/A"}
+                      ? `${card.team} - ${card.position ?? ""}`
+                      : "Team / position unavailable"}
                   </p>
                 </div>
                 <button
@@ -284,7 +279,7 @@ export default function PlayerCardWidget({ sport, mode }: Props) {
                 Next game:{" "}
                 <span className="text-neutral-100">
                   {card?.nextOpponent
-                    ? `${card.nextOpponent} • ${formatNextGame(card.nextGameTime)}`
+                    ? `${card.nextOpponent} - ${formatNextGame(card.nextGameTime)}`
                     : "No upcoming game info."}
                 </span>
               </p>
@@ -312,7 +307,12 @@ export default function PlayerCardWidget({ sport, mode }: Props) {
 
               <div className="mt-2 flex items-center justify-between text-[10px] text-neutral-500">
                 <span>{formatSource(card?.source)}</span>
-                {loading && <span>Loading player data...</span>}
+                <div className="text-right">
+                  {loading && <span>Loading player data...</span>}
+                  {!loading && error && (
+                    <span className="text-red-400">{error}</span>
+                  )}
+                </div>
               </div>
             </div>
           );

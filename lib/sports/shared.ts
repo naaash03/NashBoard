@@ -9,12 +9,19 @@ export type SlateGame = {
   startTime: string; // ISO
   league: Sport;
   venue?: string;
+  status?: string;
 };
 
 export interface ApiSportsResponse<T> {
   response?: T[];
   data?: T[];
 }
+
+export type SlateFetchResult = {
+  games: SlateGame[];
+  source: "api-sports" | "mock";
+  message?: string;
+};
 
 export function getApiSportsTimezone(): string {
   return process.env.SPORTS_API_TIMEZONE ?? "America/New_York";

@@ -94,7 +94,7 @@ export default function RbVsDlineWidget({ sport, mode }: Props) {
         </div>
         <div className="text-right text-xs text-neutral-300">
           <p className="font-semibold">
-            {Math.round(low)}–{Math.round(high)} yds
+            {Math.round(low)} - {Math.round(high)} yds
           </p>
           <p className="text-[10px] text-neutral-400">
             Projected rushing yards
@@ -105,6 +105,9 @@ export default function RbVsDlineWidget({ sport, mode }: Props) {
       <div className="text-xs text-neutral-300">
         <span className="font-semibold">Confidence: </span>
         <span>{projection.confidence}</span>
+        {mode === "ADVANCED" && (
+          <span className="ml-1 text-[10px] text-neutral-500">(advanced view)</span>
+        )}
       </div>
 
       <p className="text-xs text-neutral-400">{projection.explanation}</p>

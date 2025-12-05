@@ -15,7 +15,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
   {
     key: "tonights_slate",
     name: "Tonight's Games",
-    description: "Displays tonight’s matchups, odds, and status.",
+    description: "Displays tonight's matchups, odds, and status.",
     category: "Games",
     supportedSports: ["NFL", "NBA", "MLB"],
     defaultSize: { w: 4, h: 3 },

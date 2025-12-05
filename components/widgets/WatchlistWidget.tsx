@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type Favorite = {
   id: string;
@@ -12,8 +12,14 @@ type Favorite = {
 
 type Sport = "NFL" | "NBA" | "MLB";
 
-export default function WatchlistWidget({ sport }: { sport?: Sport }) {
+type Props = {
+  sport?: Sport;
+  mode?: "BEGINNER" | "ADVANCED";
+};
+
+export default function WatchlistWidget({ sport, mode }: Props) {
   const resolvedSport = sport ?? "NFL";
+  const resolvedMode = mode ?? "BEGINNER";
   const [items, setItems] = useState<Favorite[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingTonight, setLoadingTonight] = useState(false);
@@ -23,79 +29,85 @@ export default function WatchlistWidget({ sport }: { sport?: Sport }) {
     {}
   );
 
-  async function hydrateTonightMatchups(currentEntries: Favorite[]) {
-    try {
-      setLoadingTonight(true);
+  const hydrateTonightMatchups = useCallback(
+    async (currentEntries: Favorite[]) => {
+      try {
+        setLoadingTonight(true);
 
-      const res = await fetch(
-        `/api/widgets/tonights-slate?sport=${resolvedSport}&mode=BEGINNER`,
-        { cache: "no-store" }
-      );
-
-      if (!res.ok) {
-        console.error("Failed to load tonight's slate for watchlist", res.status);
-        setTonightMatchups({});
-        return;
-      }
-
-      const data = (await res.json()) as {
-        games: { home: string; away: string; startTime: string }[];
-      };
-
-      const games = data.games ?? [];
-      const map: Record<string, string> = {};
-
-      for (const entry of currentEntries) {
-        const name = entry.label.toLowerCase();
-
-        if (entry.entityType !== "TEAM") {
-          map[entry.id] = "Matchups are only available for teams.";
-          continue;
-        }
-
-        const match = games.find(
-          (g) =>
-            g.home.toLowerCase().includes(name) ||
-            g.away.toLowerCase().includes(name)
+        const res = await fetch(
+          `/api/widgets/tonights-slate?sport=${resolvedSport}&mode=${resolvedMode}`,
+          { cache: "no-store" }
         );
 
-        if (!match) {
-          const name = entry.label.trim();
-
-          const wordCount = name.split(/\s+/).filter(Boolean).length;
-          const looksLikePlayer = wordCount >= 2;
-
-          if (looksLikePlayer) {
-            map[entry.id] =
-              "Player entry – matchups are only shown for teams. Use the Player Card widget for details.";
-          } else {
-            map[entry.id] = "No game tonight.";
-          }
-          continue;
+        if (!res.ok) {
+          console.error("Failed to load tonight's slate for watchlist", res.status);
+          setTonightMatchups({});
+          return;
         }
 
-        const isHome = match.home.toLowerCase().includes(name);
-        const opponent = isHome ? match.away : match.home;
+        const data = (await res.json()) as {
+          games: { home: string; away: string; startTime: string }[];
+          message?: string;
+        };
 
-        const dt = new Date(match.startTime);
-        const timeLabel = Number.isNaN(dt.getTime())
-          ? "Time TBD"
-          : dt.toLocaleTimeString(undefined, {
-              hour: "numeric",
-              minute: "2-digit",
-            });
+        const games = data.games ?? [];
+        const map: Record<string, string> = {};
 
-        map[entry.id] = `${isHome ? "vs" : "@"} ${opponent} - ${timeLabel}`;
+        for (const entry of currentEntries) {
+          const name = entry.label.toLowerCase();
+
+          if (entry.entityType !== "TEAM") {
+            map[entry.id] = "Matchups are only available for teams.";
+            continue;
+          }
+
+          const match = games.find(
+            (g) =>
+              g.home.toLowerCase().includes(name) ||
+              g.away.toLowerCase().includes(name)
+          );
+
+          if (!match) {
+            const trimmedName = entry.label.trim();
+            const wordCount = trimmedName.split(/\s+/).filter(Boolean).length;
+            const looksLikePlayer = wordCount >= 2;
+
+            if (looksLikePlayer) {
+              map[entry.id] =
+                "Player entry detected; matchups are only shown for teams. Use the Player Card widget for details.";
+            } else {
+              map[entry.id] = `No ${resolvedSport} game today for this team (off day or offseason).`;
+              if (data.message) {
+                map[entry.id] = `${map[entry.id]} ${data.message}`;
+              }
+            }
+            continue;
+          }
+
+          const isHome = match.home.toLowerCase().includes(name);
+          const opponent = isHome ? match.away : match.home;
+
+          const dt = new Date(match.startTime);
+          const timeLabel = Number.isNaN(dt.getTime())
+            ? "Time TBD"
+            : dt.toLocaleTimeString(undefined, {
+                hour: "numeric",
+                minute: "2-digit",
+              });
+
+          map[entry.id] = `${isHome ? "vs" : "@"} ${opponent} - ${timeLabel}`;
+        }
+
+        setTonightMatchups(map);
+      } catch (err) {
+        console.error("Error hydrating watchlist matchups", err);
+        setTonightMatchups({});
+      } finally {
+        setLoadingTonight(false);
       }
-
-      setTonightMatchups(map);
-    } catch (err) {
-      console.error("Error hydrating watchlist matchups", err);
-      setTonightMatchups({});
-    } finally {
-      setLoadingTonight(false);
-    }
-  }
+    },
+    [resolvedMode, resolvedSport]
+  );
 
   useEffect(() => {
     if (!items || items.length === 0) {
@@ -103,11 +115,8 @@ export default function WatchlistWidget({ sport }: { sport?: Sport }) {
       return;
     }
 
-    // We intentionally omit hydrateTonightMatchups from deps to avoid recreating
-    // the effect each render; it only depends on items and resolvedSport.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     hydrateTonightMatchups(items);
-  }, [items, resolvedSport]);
+  }, [items, hydrateTonightMatchups]);
 
   useEffect(() => {
     let cancelled = false;

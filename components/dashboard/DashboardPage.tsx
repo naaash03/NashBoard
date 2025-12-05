@@ -1,13 +1,14 @@
 // components/dashboard/DashboardPage.tsx
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 import WidgetLibrary from "@/components/widgets/WidgetLibrary";
 import TonightsSlateWidget from "@/components/widgets/TonightsSlateWidget";
 import PlayerCardWidget from "@/components/widgets/PlayerCardWidget";
 import WatchlistWidget from "@/components/widgets/WatchlistWidget";
 import RbVsDlineWidget from "@/components/widgets/RbVsDlineWidget";
+import TopBarAuth from "@/components/TopBarAuth";
 
 type Sport = "NFL" | "NBA" | "MLB";
 
@@ -41,7 +42,7 @@ const WIDGET_COMPONENTS: Record<
 > = {
   tonights_slate: (props) => <TonightsSlateWidget {...props} />,
   player_card: (props) => <PlayerCardWidget {...props} />,
-  watchlist: (props) => <WatchlistWidget sport={props.sport} />,
+  watchlist: (props) => <WatchlistWidget sport={props.sport} mode={props.mode} />,
   rb_vs_dline: (props) => <RbVsDlineWidget {...props} />,
 };
 
@@ -53,9 +54,11 @@ export default function DashboardPage() {
   const [loadingAdd, setLoadingAdd] = useState(false);
   const [savingMode, setSavingMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const loadRequestRef = useRef(0);
 
   const loadDashboard = useCallback(
     async (nextSport: Sport) => {
+      const requestId = ++loadRequestRef.current;
       setLoading(true);
       setError(null);
 
@@ -74,7 +77,12 @@ export default function DashboardPage() {
             dashText,
             widgetsText,
           });
-          throw new Error("Failed to load dashboard data");
+          if (requestId === loadRequestRef.current) {
+            setDashboard(null);
+            setWidgets([]);
+            setError("Could not load dashboard data.");
+          }
+          return;
         }
 
         const [dashboardData, widgetsData] = await Promise.all([
@@ -82,15 +90,23 @@ export default function DashboardPage() {
           widgetsRes.json(),
         ]);
 
+        if (requestId !== loadRequestRef.current) {
+          return;
+        }
+
         setDashboard(dashboardData.dashboard);
         setWidgets(widgetsData.widgets);
       } catch (err) {
         console.error("Error in loadDashboard", err);
-        setError("Failed to load dashboard. Please try again.");
-        setDashboard(null);
-        setWidgets([]);
+        if (requestId === loadRequestRef.current) {
+          setError("Failed to load dashboard. Please try again.");
+          setDashboard(null);
+          setWidgets([]);
+        }
       } finally {
-        setLoading(false);
+        if (requestId === loadRequestRef.current) {
+          setLoading(false);
+        }
       }
     },
     []
@@ -242,6 +258,8 @@ export default function DashboardPage() {
               </button>
             ))}
           </div>
+
+          <TopBarAuth />
         </div>
       </header>
 
@@ -285,7 +303,7 @@ export default function DashboardPage() {
                             className="rounded-full px-2 text-xs text-neutral-400 hover:text-red-400 hover:bg-neutral-800"
                             aria-label="Remove widget"
                           >
-                            ×
+                            A-
                           </button>
                         </div>
 

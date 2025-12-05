@@ -1,6 +1,7 @@
 import "server-only";
 import {
   SlateGame,
+  SlateFetchResult,
   buildApiSportsHeaders,
   ApiSportsResponse,
   getApiSportsTimezone,
@@ -96,6 +97,7 @@ type ProviderGame = {
   arena?: { name?: string };
   venue?: { name?: string };
   league?: { name?: string };
+  status?: { long?: string; short?: string; timer?: string } | string;
 };
 
 function normalizeNbaStartTime(date: ProviderGame["date"]): string {
@@ -115,7 +117,19 @@ function normalizeNbaStartTime(date: ProviderGame["date"]): string {
   return new Date().toISOString();
 }
 
-export async function fetchTonightNbaSlate(): Promise<SlateGame[]> {
+const buildMockResult = (message: string): SlateFetchResult => ({
+  games: MOCK_NBA_SLATE,
+  source: "mock",
+  message,
+});
+
+const buildEmptyApiResult = (message: string): SlateFetchResult => ({
+  games: [],
+  source: "api-sports",
+  message,
+});
+
+export async function fetchTonightNbaSlate(): Promise<SlateFetchResult> {
   const baseUrl =
     process.env.SPORTS_API_NBA_BASE_URL ?? "https://v2.nba.api-sports.io";
 
@@ -124,13 +138,19 @@ export async function fetchTonightNbaSlate(): Promise<SlateGame[]> {
     headers = buildApiSportsHeaders();
   } catch (err) {
     console.error("[NBA] API-Sports headers error:", err);
-    return MOCK_NBA_SLATE;
+    return buildMockResult(
+      "Missing SPORTS_API_KEY. Showing demo NBA slate until the key is configured."
+    );
   }
 
   // Abort and use mock slate if league or season are missing.
   if (!process.env.NBA_LEAGUE_ID || !process.env.NBA_SEASON) {
-    console.warn("[NBA] Missing NBA_LEAGUE_ID or NBA_SEASON in .env – using mock slate.");
-    return MOCK_NBA_SLATE;
+    console.warn(
+      "[NBA] Missing NBA_LEAGUE_ID or NBA_SEASON in .env – using mock slate."
+    );
+    return buildMockResult(
+      "NBA league/season are not configured. Add NBA_LEAGUE_ID and NBA_SEASON to pull API-Sports data."
+    );
   }
 
   const timezone = getApiSportsTimezone();
@@ -144,9 +164,8 @@ export async function fetchTonightNbaSlate(): Promise<SlateGame[]> {
     params.append("season", process.env.NBA_SEASON);
   }
 
-  const url = `${baseUrl}/games?${params.toString()}`;
-
-  try {
+  async function fetchGames(searchParams: URLSearchParams) {
+    const url = `${baseUrl}/games?${searchParams.toString()}`;
     const res = await fetch(url, { headers, cache: "no-store" });
 
     if (!res.ok) {
@@ -155,7 +174,7 @@ export async function fetchTonightNbaSlate(): Promise<SlateGame[]> {
         res.status,
         await res.text()
       );
-      return MOCK_NBA_SLATE;
+      return { games: null as SlateGame[] | null, message: res.statusText };
     }
 
     const json = (await res.json()) as ApiSportsResponse<ProviderGame>;
@@ -177,10 +196,12 @@ export async function fetchTonightNbaSlate(): Promise<SlateGame[]> {
       const startTime = normalizeNbaStartTime(g.date);
 
       const venue =
-        g.arena?.name ??
-        g.venue?.name ??
-        g.league?.name ??
-        undefined;
+        g.arena?.name ?? g.venue?.name ?? g.league?.name ?? undefined;
+
+      const status =
+        typeof g.status === "string"
+          ? g.status
+          : g.status?.long ?? g.status?.short ?? "SCHEDULED";
 
       return {
         id: String(g.id ?? g.gameId ?? `nba-${idx}`),
@@ -189,16 +210,41 @@ export async function fetchTonightNbaSlate(): Promise<SlateGame[]> {
         startTime,
         venue,
         league: "NBA",
+        status,
       };
     });
 
-    if (!games.length) {
-      return MOCK_NBA_SLATE;
+    return { games, message: undefined as string | undefined };
+  }
+
+  try {
+    // First attempt: date + season (normal path).
+    let { games, message } = await fetchGames(params);
+
+    // Fallback: if nothing returned, try live/all without season filter in case the season ID is off.
+    if (!games || games.length === 0) {
+      console.warn(
+        "[NBA] Empty slate with date/season; retrying without season and with live=all."
+      );
+      const retryParams = new URLSearchParams(params);
+      retryParams.delete("season");
+      retryParams.append("live", "all");
+      const retry = await fetchGames(retryParams);
+      games = retry.games ?? [];
+      message = retry.message;
     }
 
-    return games;
+    if (!games || games.length === 0) {
+      return buildEmptyApiResult(
+        "No NBA games scheduled today per API-Sports (rest day or offseason)."
+      );
+    }
+
+    return { games, source: "api-sports", message };
   } catch (err) {
     console.error("[NBA] Error fetching slate from API-Sports:", err);
-    return MOCK_NBA_SLATE;
+    return buildMockResult(
+      "API-Sports request failed. Showing demo NBA slate."
+    );
   }
 }

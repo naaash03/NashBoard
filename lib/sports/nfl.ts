@@ -1,6 +1,7 @@
 import "server-only";
 import {
   SlateGame,
+  SlateFetchResult,
   buildApiSportsHeaders,
   ApiSportsResponse,
   getApiSportsTimezone,
@@ -48,7 +49,19 @@ function normalizeNflStartTime(date: ProviderGame["date"]): string {
   return new Date().toISOString();
 }
 
-export async function fetchTonightNflSlate(): Promise<SlateGame[]> {
+const buildMockResult = (message: string): SlateFetchResult => ({
+  games: MOCK_NFL_SLATE,
+  source: "mock",
+  message,
+});
+
+const buildEmptyApiResult = (message: string): SlateFetchResult => ({
+  games: [],
+  source: "api-sports",
+  message,
+});
+
+export async function fetchTonightNflSlate(): Promise<SlateFetchResult> {
   const baseUrl =
     process.env.SPORTS_API_NFL_BASE_URL ??
     "https://v1.american-football.api-sports.io";
@@ -58,13 +71,19 @@ export async function fetchTonightNflSlate(): Promise<SlateGame[]> {
     headers = buildApiSportsHeaders();
   } catch (err) {
     console.error("[NFL] API-Sports headers error:", err);
-    return MOCK_NFL_SLATE;
+    return buildMockResult(
+      "Missing SPORTS_API_KEY. Showing demo NFL slate until the key is configured."
+    );
   }
 
   // Abort and use mock slate if league or season are missing.
   if (!process.env.NFL_LEAGUE_ID || !process.env.NFL_SEASON) {
-    console.warn("[NFL] Missing NFL_LEAGUE_ID or NFL_SEASON in .env – using mock slate.");
-    return MOCK_NFL_SLATE;
+    console.warn(
+      "[NFL] Missing NFL_LEAGUE_ID or NFL_SEASON in .env – using mock slate."
+    );
+    return buildMockResult(
+      "NFL league/season are not configured. Add NFL_LEAGUE_ID and NFL_SEASON to pull API-Sports data."
+    );
   }
 
   const timezone = getApiSportsTimezone();
@@ -89,7 +108,9 @@ export async function fetchTonightNflSlate(): Promise<SlateGame[]> {
         res.status,
         await res.text()
       );
-      return MOCK_NFL_SLATE;
+      return buildMockResult(
+        `API-Sports responded with ${res.status}. Showing demo NFL slate instead.`
+      );
     }
 
     const json = (await res.json()) as ApiSportsResponse<ProviderGame>;
@@ -98,21 +119,14 @@ export async function fetchTonightNflSlate(): Promise<SlateGame[]> {
 
     const games: SlateGame[] = data.map((g, idx) => {
       const homeTeam =
-        g.teams?.home?.name ??
-        g.teams?.home?.nickname ??
-        "Home";
+        g.teams?.home?.name ?? g.teams?.home?.nickname ?? "Home";
       const awayTeam =
-        g.teams?.away?.name ??
-        g.teams?.away?.nickname ??
-        "Away";
+        g.teams?.away?.name ?? g.teams?.away?.nickname ?? "Away";
 
       const startTime = normalizeNflStartTime(g.date);
 
       const venue =
-        g.league?.name ??
-        g.game?.venue ??
-        g.venue?.name ??
-        undefined;
+        g.league?.name ?? g.game?.venue ?? g.venue?.name ?? undefined;
 
       return {
         id: String(g.id ?? g.gameId ?? `nfl-${idx}`),
@@ -125,12 +139,16 @@ export async function fetchTonightNflSlate(): Promise<SlateGame[]> {
     });
 
     if (!games.length) {
-      return MOCK_NFL_SLATE;
+      return buildEmptyApiResult(
+        "No NFL games scheduled today per API-Sports (off week or offseason)."
+      );
     }
 
-    return games;
+    return { games, source: "api-sports" };
   } catch (err) {
     console.error("[NFL] Error fetching slate from API-Sports:", err);
-    return MOCK_NFL_SLATE;
+    return buildMockResult(
+      "API-Sports request failed. Showing demo NFL slate."
+    );
   }
 }

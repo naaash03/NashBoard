@@ -22,6 +22,7 @@ type SlateResponse = {
   mode: "BEGINNER" | "ADVANCED";
   games: SlateGame[];
   source?: SlateSource;
+  message?: string;
 };
 
 type Props = {
@@ -46,10 +47,12 @@ export default function TonightsSlateWidget({ sport, mode }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [source, setSource] = useState<SlateSource>("unknown");
+  const [message, setMessage] = useState<string | null>(null);
 
   const fetchGames = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setMessage(null);
 
     try {
       const res = await fetch(
@@ -68,6 +71,7 @@ export default function TonightsSlateWidget({ sport, mode }: Props) {
       const data: SlateResponse = await res.json();
       setGames(data.games ?? []);
       setSource(data.source ?? "unknown");
+      setMessage(data.message ?? null);
     } catch (err) {
       console.error("Error loading tonight's slate", err);
       setError("Failed to load tonight's slate.");
@@ -103,14 +107,20 @@ export default function TonightsSlateWidget({ sport, mode }: Props) {
 
   if (games.length === 0) {
     return (
-      <div className="flex items-center justify-between text-sm text-neutral-400">
-        <span>No games found for tonight for {sport}.</span>
-        <button
-          onClick={fetchGames}
-          className="rounded-full border border-neutral-600 px-3 py-1 text-[11px] hover:bg-neutral-800"
-        >
-          Refresh
-        </button>
+      <div className="space-y-2 text-sm text-neutral-400">
+        <div className="flex items-center justify-between">
+          <span>
+            No {sport} games scheduled today.
+            {message ? ` ${message}` : " (off day or offseason)"}
+          </span>
+          <button
+            onClick={fetchGames}
+            className="rounded-full border border-neutral-600 px-3 py-1 text-[11px] hover:bg-neutral-800"
+          >
+            Refresh
+          </button>
+        </div>
+        <p className="text-[11px] text-neutral-500">{sourceLabel}</p>
       </div>
     );
   }
@@ -133,6 +143,9 @@ export default function TonightsSlateWidget({ sport, mode }: Props) {
           Refresh
         </button>
       </div>
+      {message && (
+        <p className="text-[11px] text-neutral-400">{message}</p>
+      )}
 
       {games.map((g) => (
         <div
